@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  SourceBucketName:
+    Type: String
+    Description: 'bucket-olist-raw-zone'
+  DestinationBucketName:
+    Type: String
+    Description: 'bucket-olist-cleaned-zone'
+  ScriptBucketName:
+    Type: String
+    Description: 'bucket-olist-script-etl'
+
+Resources:
+  SourceBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref SourceBucketName
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+                BlockPublicAcls: False
+                BlockPublicPolicy: False
+                IgnorePublicAcls: False
+                RestrictPublicBuckets: False
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3000
+
+  SourceBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref SourceBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowUploadsAndReadsFromScript
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${SourceBucketName}'
+              - !Sub 'arn:aws:s3:::${SourceBucketName}/*'
+
+  DestinationBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref DestinationBucketName
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+                BlockPublicAcls: False
+                BlockPublicPolicy: False
+                IgnorePublicAcls: False
+                RestrictPublicBuckets: False
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3000
+
+  DestinationBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref DestinationBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowReadsFromSourceBucket
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - 's3:GetObject'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${DestinationBucketName}'
+              - !Sub 'arn:aws:s3:::${DestinationBucketName}/*'
+
+  ScriptBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref ScriptBucketName
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+                BlockPublicAcls: False
+                BlockPublicPolicy: False
+                IgnorePublicAcls: False
+                RestrictPublicBuckets: False
+      Tags:
+        - Key: Name
+          Value: GlueScriptBucket
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldVersions
+            Status: Enabled
+            ExpirationInDays: 365
+            NoncurrentVersionExpirationInDays: 90
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - '*'
+            AllowedHeaders:
+              - '*'
+
+  ScriptBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref ScriptBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SavesAllPythonScriptsETLforGlue
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${ScriptBucketName}'
+              - !Sub 'arn:aws:s3:::${ScriptBucketName}/*'
+
+Outputs:
+  SourceBucketName:
+    Description: 'Raw Zone: From personal environment to S3'
+    Value: !Ref SourceBucket
+
+  DestinationBucketName:
+    Description: 'Cleaned Zone: From S3 to cleaned and to Redshift'
+    Value: !Ref DestinationBucket
+
+  ScriptBucketName:
+    Description: 'All ETL Glue Shell Python Scripts'
+    Value: !Ref ScriptBucket

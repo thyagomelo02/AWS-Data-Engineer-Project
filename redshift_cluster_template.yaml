@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation Template to create a Datawarehouse Redshift cluster and configure it to read .csv files from an S3 bucket'
+Parameters:
+  ClusterIdentifier:
+    Type: String
+    Description: 'Redshift Cluster Identifier'
+  NodeType:
+    Type: String
+    Description: 'Redshift Node Type'
+  MasterUsername:
+    Type: String
+    Description: 'Redshift Master Username'
+  MasterUserPassword:
+    Type: String
+    NoEcho: true
+    Description: 'Redshift Master User Password'
+  DatabaseName:
+    Type: String
+    Description: 'Redshift Database Name'
+  ClusterType:
+    Type: String
+    Description: 'Redshift Cluster Type'
+    AllowedValues:
+      - single-node
+      - multi-node
+    Default: single-node
+  NumberOfNodes:
+    Type: Number
+    Description: 'Number of Nodes in Redshift Cluster'
+    Default: 1
+  S3BucketName:
+    Type: String
+    Description: 'Name of the S3 bucket containing CSV files'
+  VpcCidr:
+    Type: String
+    Default: '10.0.0.0/16'
+  SubnetCidr1:
+    Type: String
+    Default: '10.0.1.0/24'
+  SubnetCidr2:
+    Type: String
+    Default: '10.0.2.0/24'
+
+Resources:
+  MyVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: 'MyVPC'
+
+  MyInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: 'MyInternetGateway'
+
+  AttachIGW:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
+
+  MyRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: 'MyRouteTable'
+
+  MyRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref MyRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref MyInternetGateway
+
+  Subnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet1
+      RouteTableId: !Ref MyRouteTable
+
+  Subnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet2
+      RouteTableId: !Ref MyRouteTable
+
+  Subnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: !Ref SubnetCidr1
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ''
+      Tags:
+        - Key: Name
+          Value: 'MySubnet1'
+
+  Subnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: !Ref SubnetCidr2
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ''
+      Tags:
+        - Key: Name
+          Value: 'MySubnet2'
+
+  RedshiftSubnetGroup:
+    Type: 'AWS::Redshift::ClusterSubnetGroup'
+    Properties:
+      Description: 'Subnet group for Redshift cluster'
+      SubnetIds:
+        - !Ref Subnet1
+        - !Ref Subnet2
+
+  RedshiftSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Enable Redshift access'
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: '0.0.0.0/0'
+
+  RedshiftCluster:
+    Type: 'AWS::Redshift::Cluster'
+    Properties:
+      ClusterIdentifier: !Ref ClusterIdentifier
+      NodeType: !Ref NodeType
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      DBName: !Ref DatabaseName
+      ClusterType: !Ref ClusterType
+      NumberOfNodes: !If [ IsSingleNode, 1, !Ref NumberOfNodes ]
+      ClusterSubnetGroupName: !Ref RedshiftSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref RedshiftSecurityGroup
+      IamRoles:
+        - !GetAtt RedshiftRole.Arn
+      PubliclyAccessible: true
+
+  RedshiftRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'redshift.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'RedshiftS3AccessPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+
+Conditions:
+  IsSingleNode: !Equals [ !Ref ClusterType, 'single-node' ]
+
+Outputs:
+  RedshiftClusterEndpoint:
+    Description: 'Endpoint of the Redshift Cluster'
+    Value: !GetAtt RedshiftCluster.Endpoint.Address

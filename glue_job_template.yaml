@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  SourceBucketName:
+    Type: String
+    Description: 'bucket-olist-raw-zone'
+
+  DestinationBucketName:
+    Type: String
+    Description: 'bucket-olist-cleaned-zone'
+    
+Resources:
+  GlueJobRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'glue.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'GlueJobPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${SourceBucketName}'
+                  - !Sub 'arn:aws:s3:::${SourceBucketName}/*'
+                  - !Sub 'arn:aws:s3:::${DestinationBucketName}'
+                  - !Sub 'arn:aws:s3:::${DestinationBucketName}/*'                
+
+  GlueJob:
+    Type: 'AWS::Glue::Job'
+    Properties:
+      Name: 'GluePythonShellJobStack'
+      Role: !GetAtt GlueJobRole.Arn
+      Command:
+        Name: 'pythonshell'
+        ScriptLocation: 's3://bucket-olist-script-etl/olist_glue_python_shell_script.py'
+        PythonVersion: '3'
+      MaxRetries: 0
+      Timeout: 2880
