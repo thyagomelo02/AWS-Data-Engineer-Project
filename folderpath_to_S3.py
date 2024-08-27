@@ -4,10 +4,10 @@ from datetime import datetime
 
 #configuration
 
-local_folder_path = 'C:\\Users\\thyag\\OneDrive\\Documentos\\ESTUDOS\\Data-Engineer-Projects\\dataset_olist'
+local_folder_path = [DATA-SOURCE-LOCAL]
 bucket_name = 'bucket-olist-raw-zone'  
-aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
-aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+aws_access_key_id = [AWS]
+aws_secret_access_key = [AWS]
 region_name = 'us-east-1' 
 
 s3_client = boto3.client(
