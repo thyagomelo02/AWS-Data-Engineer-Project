@@ -1,6 +1,3 @@
-#criar ETL dos dados no S3.
-#Tentar usar o Glue Python Shell
-
 from setuptools import setup
 
 setup(
